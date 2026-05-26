@@ -1,5 +1,8 @@
 "use client"
-import { Show, SignInButton, UserButton } from "@clerk/nextjs";
+
+import { useEffect, useState } from "react"
+import { Show, SignInButton, UserButton, useUser } from "@clerk/nextjs"
+import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -47,54 +50,11 @@ const secondaryNavigation = [
 { name: "Profile", icon: User, href: "#" },
 ]
 
-// Tasks data
-const tasks = [
-{
-id: 1,
-title: "Complete Linear Algebra Assignment",
-course: "MATH 201",
-dueDate: "Today",
-priority: "high" as const,
-completed: false,
-},
-{
-id: 2,
-title: "Read Chapter 5 - Data Structures",
-course: "CS 301",
-dueDate: "Tomorrow",
-priority: "medium" as const,
-completed: false,
-},
-{
-id: 3,
-title: "Submit Lab Report",
-course: "PHYS 101",
-dueDate: "In 2 days",
-priority: "high" as const,
-completed: false,
-},
-{
-id: 4,
-title: "Group Project Meeting",
-course: "CS 401",
-dueDate: "In 3 days",
-priority: "low" as const,
-completed: false,
-},
-{
-id: 5,
-title: "Review lecture notes",
-course: "MATH 201",
-dueDate: "In 4 days",
-priority: "medium" as const,
-completed: true,
-},
-]
-
-const priorityStyles = {
-high: "bg-destructive/20 text-destructive border-destructive/30",
-medium: "bg-chart-3/20 text-chart-3 border-chart-3/30",
-low: "bg-chart-2/20 text-chart-2 border-chart-2/30",
+type Task = {
+  id: string
+  title: string
+  user_id: string
+  completed?: boolean
 }
 
 // Study hours data
@@ -379,63 +339,107 @@ fill="url(#studyGradient)"
 }
 
 // Tasks Card Component
-function TasksCard() {
-return (
-<Card className="flex flex-col">
-<CardHeader className="flex flex-row items-center justify-between pb-2">
-<CardTitle className="text-base font-semibold">Upcoming Tasks</CardTitle>
-<Badge variant="secondary" className="text-xs">
-{tasks.filter((t) => !t.completed).length} pending
-</Badge>
-</CardHeader>
-<CardContent className="flex-1 overflow-auto">
-<ul className="space-y-3">
-{tasks.map((task) => (
-<li
-key={task.id}
-className={cn(
-"flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3 transition-all hover:bg-secondary/50",
-task.completed && "opacity-60"
-)}
->
-<Checkbox
-id={`task-${task.id}`}
-checked={task.completed}
-className="mt-0.5"
-/>
-<div className="flex-1 min-w-0">
-<label
-htmlFor={`task-${task.id}`}
-className={cn(
-"text-sm font-medium cursor-pointer",
-task.completed && "line-through text-muted-foreground"
-)}
->
-{task.title}
-</label>
-<div className="flex items-center gap-2 mt-1">
-<span className="text-xs text-muted-foreground">{task.course}</span>
-<span className="text-muted-foreground">{"•"}</span>
-<span className="text-xs text-muted-foreground">{task.dueDate}</span>
-</div>
-</div>
-<Badge
-variant="outline"
-className={cn("text-xs capitalize shrink-0", priorityStyles[task.priority])}
->
-{task.priority}
-</Badge>
-</li>
-))}
-</ul>
-</CardContent>
-</Card>
-)
+function TasksCard({
+  tasks,
+  newTask,
+  setNewTask,
+  onAddTask,
+}: {
+  tasks: Task[]
+  newTask: string
+  setNewTask: (value: string) => void
+  onAddTask: () => void
+}) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader className="flex flex-row items-center justify-between pb-2">
+        <CardTitle className="text-base font-semibold">Upcoming Tasks</CardTitle>
+        <Badge variant="secondary" className="text-xs">
+          {tasks.filter((t) => !t.completed).length} pending
+        </Badge>
+      </CardHeader>
+      <CardContent className="flex-1 overflow-auto">
+        <div className="mb-4 flex gap-2">
+          <Input
+            value={newTask}
+            onChange={(e) => setNewTask(e.target.value)}
+            placeholder="Add a new task..."
+            onKeyDown={(e) => e.key === "Enter" && onAddTask()}
+          />
+          <Button onClick={onAddTask}>Add</Button>
+        </div>
+        <ul className="space-y-3">
+          {tasks.map((task) => (
+            <li
+              key={task.id}
+              className={cn(
+                "flex items-start gap-3 rounded-lg border border-border bg-secondary/30 p-3 transition-all hover:bg-secondary/50",
+                task.completed && "opacity-60"
+              )}
+            >
+              <Checkbox
+                id={`task-${task.id}`}
+                checked={task.completed ?? false}
+                className="mt-0.5"
+              />
+              <div className="flex-1 min-w-0">
+                <label
+                  htmlFor={`task-${task.id}`}
+                  className={cn(
+                    "text-sm font-medium cursor-pointer",
+                    task.completed && "line-through text-muted-foreground"
+                  )}
+                >
+                  {task.title}
+                </label>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </CardContent>
+    </Card>
+  )
 }
 
 // Main Dashboard Page
 export default function Dashboard() {
-return (
+  const { user } = useUser()
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [newTask, setNewTask] = useState("")
+
+  useEffect(() => {
+    if (!user?.id) return
+
+    async function fetchTasks() {
+      const { data, error } = await supabase
+        .from("tasks")
+        .select("*")
+        .eq("user_id", user.id)
+
+      if (!error && data) {
+        setTasks(data)
+      }
+    }
+
+    fetchTasks()
+  }, [user?.id])
+
+  async function addTask() {
+    if (!user?.id || !newTask.trim()) return
+
+    const { data, error } = await supabase
+      .from("tasks")
+      .insert({ title: newTask.trim(), user_id: user.id })
+      .select()
+      .single()
+
+    if (!error && data) {
+      setTasks((prev) => [...prev, data])
+      setNewTask("")
+    }
+  }
+
+  return (
 <div className="flex h-screen bg-background">
 <div className="absolute top-4 right-4 z-50">
 <Show when="signed-out">
@@ -458,7 +462,12 @@ return (
 
 <div className="grid gap-6 lg:grid-cols-2">
 <StudyHoursChart />
-<TasksCard />
+<TasksCard
+  tasks={tasks}
+  newTask={newTask}
+  setNewTask={setNewTask}
+  onAddTask={addTask}
+/>
 </div>
 </div>
 </main>
