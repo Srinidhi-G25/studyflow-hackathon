@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useCompletion } from "@ai-sdk/react"
 import { Show, SignInButton, UserButton, useUser } from "@clerk/nextjs"
 import { supabase } from "@/lib/supabase"
 import { cn } from "@/lib/utils"
@@ -25,6 +26,7 @@ TrendingDown,
 Clock,
 Target,
 Flame,
+Loader2,
 } from "lucide-react"
 import {
 Area,
@@ -401,11 +403,48 @@ function TasksCard({
   )
 }
 
+function StudyCoachCard({
+  completion,
+  isLoading,
+  onGenerate,
+}: {
+  completion: string
+  isLoading: boolean
+  onGenerate: () => void
+}) {
+  return (
+    <Card className="flex flex-col">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-base font-semibold">AI Study Coach</CardTitle>
+      </CardHeader>
+      <CardContent className="flex flex-1 flex-col">
+        <Button onClick={onGenerate} disabled={isLoading}>
+          Generate 3-Day Plan
+        </Button>
+        {isLoading && (
+          <div className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Thinking...
+          </div>
+        )}
+        {completion ? (
+          <p className="mt-4 flex-1 text-sm whitespace-pre-wrap text-foreground">
+            {completion}
+          </p>
+        ) : null}
+      </CardContent>
+    </Card>
+  )
+}
+
 // Main Dashboard Page
 export default function Dashboard() {
   const { user } = useUser()
   const [tasks, setTasks] = useState<Task[]>([])
   const [newTask, setNewTask] = useState("")
+  const { completion, complete, isLoading } = useCompletion({
+    api: "/api/study-plan",
+  })
 
   useEffect(() => {
     if (!user?.id) return
@@ -460,13 +499,18 @@ export default function Dashboard() {
 <div className="mx-auto max-w-7xl space-y-6">
 <StatsCards />
 
-<div className="grid gap-6 lg:grid-cols-2">
 <StudyHoursChart />
+<div className="grid gap-6 lg:grid-cols-2">
 <TasksCard
   tasks={tasks}
   newTask={newTask}
   setNewTask={setNewTask}
   onAddTask={addTask}
+/>
+<StudyCoachCard
+  completion={completion}
+  isLoading={isLoading}
+  onGenerate={() => complete(tasks.map((t) => t.title).join(", "))}
 />
 </div>
 </div>
